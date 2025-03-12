@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YouTube Video Downloader</title>
+    <style>
+        /* Global Styles */
+        body {
+            font-family: 'Poppins', sans-serif;
+            text-align: center;
+            background: linear-gradient(135deg, #ff9a9e, #fad0c4);
+            color: #333;
+            margin: 0;
+            padding: 20px;
+        }
+
+        h2 {
+            font-size: 28px;
+            color: #fff;
+            margin-bottom: 20px;
+        }
+
+        /* Form & Input Styling */
+        .container {
+            max-width: 500px;
+            margin: auto;
+            background: rgba(255, 255, 255, 0.2);
+            backdrop-filter: blur(10px);
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0px 4px 10px rgba(0, 0, 0, 0.2);
+        }
+
+        input {
+            width: 80%;
+            padding: 12px;
+            font-size: 16px;
+            border: none;
+            border-radius: 5px;
+            outline: none;
+            margin-bottom: 10px;
+        }
+
+        button {
+            background: #ff5f6d;
+            border: none;
+            padding: 12px 20px;
+            font-size: 16px;
+            color: #fff;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: 0.3s ease-in-out;
+        }
+
+        button:hover {
+            background: #ff7e5f;
+        }
+
+        /* Video Details Card */
+        .video-details {
+            display: none;
+            background: #fff;
+            padding: 15px;
+            border-radius: 10px;
+            box-shadow: 0px 4px 10px rgba(0, 0, 0, 0.1);
+            margin-top: 20px;
+            text-align: left;
+        }
+
+        .video-details img {
+            width: 100%;
+            border-radius: 8px;
+            margin-top: 10px;
+        }
+
+        /* Progress Bar */
+        .progress-container {
+            display: none;
+            width: 100%;
+            background: #ddd;
+            border-radius: 5px;
+            margin-top: 15px;
+            height: 10px;
+        }
+
+        .progress-bar {
+            width: 0%;
+            height: 10px;
+            background: #ff5f6d;
+            border-radius: 5px;
+            transition: width 0.5s ease-in-out;
+        }
+
+        .success-message {
+            display: none;
+            color: green;
+            font-weight: bold;
+            margin-top: 15px;
+        }
+    </style>
+</head>
+<body>
+    <h2>📥 YouTube Video Downloader</h2>
+    <div class="container">
+        <form id="fetch-form">
+            <input type="text" id="video_link" name="video_link" placeholder="Enter YouTube Video URL" required>
+            <button type="button" onclick="fetchDetails()">Fetch Video</button>
+        </form>
+
+        <!-- Video Details Section -->
+        <div id="video-info" class="video-details">
+            <h3 id="video-title"></h3>
+            <img id="video-thumbnail" src="" alt="Thumbnail">
+            <p><strong>Size:</strong> <span id="video-size"></span></p>
+            <p><strong>Duration:</strong> <span id="video-duration"></span></p>
+            <form id="download-form" onsubmit="startDownload(event)">
+                <input type="hidden" name="video_link" id="hidden-video-link">
+                <button type="submit">Download</button>
+            </form>
+
+            <!-- Progress Bar -->
+            <div class="progress-container">
+                <div class="progress-bar" id="progress-bar"></div>
+            </div>
+            <p class="success-message" id="success-message">✅ Download Complete!</p>
+        </div>
+    </div>
+
+    <script>
+        function fetchDetails() {
+            let videoLink = document.getElementById('video_link').value.trim();
+            if (!videoLink) {
+                alert('Please enter a YouTube video URL.');
+                return;
+            }
+
+            fetch('/get_video_info', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ video_link: videoLink })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    alert('Error: ' + data.error);
+                    return;
+                }
+
+                document.getElementById('video-title').innerText = data.title;
+                document.getElementById('video-thumbnail').src = data.thumbnail;
+                document.getElementById('video-size').innerText = data.filesize ? data.filesize + ' MB' : 'Unknown';
+                document.getElementById('video-duration').innerText = data.duration || 'Unknown';
+                document.getElementById('hidden-video-link').value = videoLink;
+                document.getElementById('video-info').style.display = 'block';
+            })
+            .catch(error => alert('Error fetching video details: ' + error));
+        }
+
+        function startDownload(event) {
+            event.preventDefault();
+
+            let progressBar = document.getElementById("progress-bar");
+            let progressContainer = document.querySelector(".progress-container");
+            let successMessage = document.getElementById("success-message");
+
+            progressBar.style.width = "0%";
+            progressContainer.style.display = "block";
+            successMessage.style.display = "none";
+
+            let videoLink = document.getElementById('hidden-video-link').value;
+            let formData = new FormData();
+            formData.append('video_link', videoLink);
+
+            let progress = 0;
+            let interval = setInterval(() => {
+                if (progress >= 90) {
+                    clearInterval(interval);
+                } else {
+                    progress += 10;
+                    progressBar.style.width = progress + "%";
+                }
+            }, 1000);
+
+            fetch('/download', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.blob())
+            .then(blob => {
+                clearInterval(interval);
+                progressBar.style.width = "100%";
+
+                let url = window.URL.createObjectURL(blob);
+                let a = document.createElement('a');
+                a.href = url;
+                a.download = "video.mp4";
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                
+                successMessage.style.display = "block";
+            })
+            .catch(error => {
+                clearInterval(interval);
+                alert("Error downloading video: " + error);
+            });
+        }
+    </script>
+</body>
+</html>
